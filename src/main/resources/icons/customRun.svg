@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Background circle -->
+  <circle cx="8" cy="8" r="7" fill="#59A869" opacity="0.2"/>
+
+  <!-- Play/Run icon -->
+  <path d="M 6 4 L 6 12 L 11 8 Z" fill="#59A869"/>
+
+  <!-- Gear/Settings indicator -->
+  <circle cx="11" cy="11" r="2.5" fill="#389FD6"/>
+  <circle cx="11" cy="11" r="1.2" fill="#FFFFFF"/>
+</svg>
+

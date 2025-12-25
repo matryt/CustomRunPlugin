@@ -1,6 +1,7 @@
 package com.mathieucuvelier.customrunplugin
 
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
+import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
@@ -11,7 +12,6 @@ import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.RowLayout
 import com.intellij.ui.dsl.builder.TopGap
-import com.intellij.ui.dsl.builder.bindItem
 import javax.swing.JComponent
 import javax.swing.event.DocumentEvent
 
@@ -25,13 +25,19 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
 
     override fun resetEditorFrom(configuration: CustomRunConfigurationBase) {
         tempExecutionType = configuration.executionType
-        executionTypeComboBox.selectedItem = tempExecutionType
-        customCommandField.text = configuration.customCommand
+        executionTypeComboBox.selectedItem = configuration.executionType
+        customCommandField.text = configuration.customCommand.toString()
         argumentsField.text = configuration.arguments
     }
 
     override fun applyEditorTo(configuration: CustomRunConfigurationBase) {
-        configuration.executionType = tempExecutionType
+        val selectedType = executionTypeComboBox.selectedItem as? ExecutionType ?: ExecutionType.RUSTC
+
+        if (selectedType == ExecutionType.OTHER && customCommandField.text.trim().isEmpty()) {
+            throw ConfigurationException("Please specify an executable path when using 'Other' execution type")
+        }
+
+        configuration.executionType = selectedType
         configuration.customCommand = customCommandField.text
         configuration.arguments = argumentsField.text
     }
@@ -42,24 +48,13 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
 
         val panel = panel {
             row("Execution type:") {
-                val comboBuilder = comboBox(ExecutionType.entries.toList())
-
-                comboBuilder.bindItem(
-                    { tempExecutionType },
-                    {
-                        if (it != null) {
-                            tempExecutionType = it
-                        }
-                    }
-                )
-
-                executionTypeComboBox = comboBuilder.component
+                executionTypeComboBox = comboBox(ExecutionType.entries.toList()).component
                 executionTypeComboBox.renderer = SimpleListCellRenderer.create { label, value, _ ->
                     if (value != null) label.text = value.name.lowercase().replaceFirstChar { it.uppercase() }
                 }
             }.layout(RowLayout.LABEL_ALIGNED)
 
-            customCommandRow = row("  Custom executable path:") {
+            customCommandRow = row("Custom executable path:") {
                 cell(customCommandField).align(Align.FILL)
             }.topGap(TopGap.SMALL).layout(RowLayout.LABEL_ALIGNED)
 
@@ -88,11 +83,15 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
 
     private fun configureVisibilityLogic() {
         executionTypeComboBox.addActionListener {
-            customCommandRow?.visible(executionTypeComboBox.selectedItem == ExecutionType.OTHER)
-            fireEditorStateChanged()
+            val selected = executionTypeComboBox.selectedItem as? ExecutionType
+            if (selected != null) {
+                tempExecutionType = selected
+                customCommandRow?.visible(selected == ExecutionType.OTHER)
+                fireEditorStateChanged()
+            }
         }
 
-        customCommandRow?.visible(executionTypeComboBox.selectedItem == ExecutionType.OTHER)
+        customCommandRow?.visible(tempExecutionType == ExecutionType.OTHER)
 
         val documentListener = object : javax.swing.event.DocumentListener {
             override fun insertUpdate(e: DocumentEvent?) = fireEditorStateChanged()

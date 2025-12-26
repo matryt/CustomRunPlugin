@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Path
 
 class CustomRunConfigurationBaseTest {
 
@@ -27,11 +28,12 @@ class CustomRunConfigurationBaseTest {
     @Test
     fun `test getCommandLineForOtherCase with invalid executable`() {
         val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig")
-        config.customCommand = "/path/to/invalid/executable"
+        val invalid = "/path/to/invalid/executable"
+        config.customCommand = invalid
         val exception = assertThrows(ExecutionException::class.java) {
             config.commandLineForOtherCase
         }
-        assertEquals("Executable not found: '/path/to/invalid/executable'. Please verify the path or check that it exists in your PATH environment variable.", exception.message)
+        assertEquals(CustomRunConfigurationBase.EXECUTABLE_NOT_FOUND_PREFIX + invalid + CustomRunConfigurationBase.EXECUTABLE_NOT_FOUND_SUFFIX, exception.message)
     }
 
     @Test
@@ -41,22 +43,44 @@ class CustomRunConfigurationBaseTest {
         val exception = assertThrows(ExecutionException::class.java) {
             config.commandLineForOtherCase
         }
-        assertEquals("No executable specified. Please select an executable in the run configuration settings.", exception.message)
+        assertEquals(CustomRunConfigurationBase.NO_EXECUTABLE_SPECIFIED_MSG, exception.message)
     }
 
     @Test
     fun `test getRustcAndCargoCommandLine with rustc`() {
-        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig")
+        val isWindows = System.getProperty("os.name").startsWith("Windows")
+        val exeName = if (isWindows) "rustc.exe" else "rustc"
+        val tempDir: Path = Files.createTempDirectory("fakeRust")
+        val rustExePath = tempDir.resolve(exeName)
+        Files.createFile(rustExePath)
+        rustExePath.toFile().setExecutable(true)
+
+        val resolver = ExecutableResolver { cmd ->
+            if (cmd == "rustc") rustExePath.toFile() else null
+        }
+
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig", resolver)
         val commandLine = config.getRustcAndCargoCommandLine(true)
-        val expectedExecutable = if (System.getProperty("os.name").startsWith("Windows")) "rustc.exe" else "rustc"
-        assertEquals(expectedExecutable, File(commandLine.commandLineString).name)
+        val expectedExecutable = exeName
+        assertEquals(expectedExecutable, File(commandLine.exePath).name)
     }
 
     @Test
     fun `test getRustcAndCargoCommandLine with cargo`() {
-        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig")
+        val isWindows = System.getProperty("os.name").startsWith("Windows")
+        val exeName = if (isWindows) "cargo.exe" else "cargo"
+        val tempDir: Path = Files.createTempDirectory("fakeCargo")
+        val cargoExePath = tempDir.resolve(exeName)
+        Files.createFile(cargoExePath)
+        cargoExePath.toFile().setExecutable(true)
+
+        val resolver = ExecutableResolver { cmd ->
+            if (cmd == "cargo") cargoExePath.toFile() else null
+        }
+
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig", resolver)
         val commandLine = config.getRustcAndCargoCommandLine(false)
-        val expectedExecutable = if (System.getProperty("os.name").startsWith("Windows")) "cargo.exe" else "cargo"
-        assertEquals(expectedExecutable, File(commandLine.commandLineString).name)
+        val expectedExecutable = exeName
+        assertEquals(expectedExecutable, File(commandLine.exePath).name)
     }
 }

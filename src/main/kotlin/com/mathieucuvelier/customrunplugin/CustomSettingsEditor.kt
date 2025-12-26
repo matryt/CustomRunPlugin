@@ -24,6 +24,11 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
     private var tempExecutionType: ExecutionType = ExecutionType.RUSTC
 
     public override fun resetEditorFrom(configuration: CustomRunConfigurationBase) {
+        if (!this::executionTypeComboBox.isInitialized || !this::customCommandField.isInitialized || !this::argumentsField.isInitialized) {
+            // If editor was not created, create it lazily so tests calling resetEditorFrom without createEditor still work
+            createEditor()
+        }
+
         tempExecutionType = configuration.executionType
         executionTypeComboBox.selectedItem = configuration.executionType
         customCommandField.text = configuration.customCommand.toString()
@@ -31,10 +36,15 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
     }
 
     public override fun applyEditorTo(configuration: CustomRunConfigurationBase) {
+        if (!this::executionTypeComboBox.isInitialized || !this::customCommandField.isInitialized || !this::argumentsField.isInitialized) {
+            // ensure editor components exist
+            createEditor()
+        }
+
         val selectedType = executionTypeComboBox.selectedItem as? ExecutionType ?: ExecutionType.RUSTC
 
         if (selectedType == ExecutionType.OTHER && customCommandField.text.trim().isEmpty()) {
-            throw ConfigurationException("Please specify an executable path when using 'Other' execution type")
+            throw ConfigurationException(CustomRunConfigurationBase.NO_EXECUTABLE_SPECIFIED_MSG)
         }
 
         configuration.executionType = selectedType

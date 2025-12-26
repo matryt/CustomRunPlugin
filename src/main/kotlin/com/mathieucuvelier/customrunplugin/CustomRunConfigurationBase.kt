@@ -6,7 +6,6 @@ import com.intellij.execution.configurations.CommandLineState
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.ParametersList
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunConfigurationOptions
@@ -19,8 +18,20 @@ import com.intellij.openapi.project.Project
 import java.io.File
 import java.util.Locale
 
-class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory?, name: String?) :
+class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory?, name: String?,
+                                 private val executableResolver: ExecutableResolver = DefaultExecutableResolver()) :
     RunConfigurationBase<CustomRunConfigurationOptions?>(project, factory, name) {
+
+    companion object {
+        const val NO_EXECUTABLE_SPECIFIED_MSG: String = "No executable specified. Please select an executable in the run configuration settings."
+        const val EXECUTABLE_NOT_FOUND_PREFIX: String = "Executable not found: '"
+        const val EXECUTABLE_NOT_FOUND_SUFFIX: String = "'. Please verify the path or check that it exists in your PATH environment variable."
+        const val DIRECTORY_INSTEAD_OF_EXECUTABLE_PREFIX: String = "The specified path is a directory, not an executable file: '"
+        const val DIRECTORY_INSTEAD_OF_EXECUTABLE_SUFFIX: String = "'. Please select a valid executable file."
+        const val FILE_NOT_EXECUTABLE_PREFIX: String = "The file '"
+        const val FILE_NOT_EXECUTABLE_SUFFIX: String = "' is not executable. Please check file permissions."
+    }
+
     override fun getConfigurationEditor(): SettingsEditor<out RunConfiguration?> {
         return CustomSettingsEditor()
     }
@@ -64,23 +75,21 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
     @get:Throws(ExecutionException::class)
     val commandLineForOtherCase: GeneralCommandLine
         get() {
-            val commandLine: GeneralCommandLine
             val customCmd = this.customCommand
             if (customCmd == null || customCmd.trim { it <= ' ' }.isEmpty()) {
-                throw ExecutionException("No executable specified. Please select an executable in the run configuration settings.")
+                throw ExecutionException(NO_EXECUTABLE_SPECIFIED_MSG)
             }
 
             val file = File(customCmd)
-            if (file.exists()) {
-                commandLine = getCommandLineWithCustomExecutable(file)
+            return if (file.exists()) {
+                getCommandLineWithCustomExecutable(file)
             } else {
-                val fileWithPath = PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS(customCmd)
+                val fileWithPath = executableResolver.findExecutable(customCmd)
                 if (fileWithPath == null || !fileWithPath.exists()) {
-                    throw ExecutionException("Executable not found: '$customCmd'. Please verify the path or check that it exists in your PATH environment variable.")
+                    throw ExecutionException(EXECUTABLE_NOT_FOUND_PREFIX + customCmd + EXECUTABLE_NOT_FOUND_SUFFIX)
                 }
-                commandLine = getCommandLineWithCustomExecutable(fileWithPath)
+                getCommandLineWithCustomExecutable(fileWithPath)
             }
-            return commandLine
         }
 
     private fun capitalize(original: String): String {
@@ -90,35 +99,32 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
 
     @Throws(ExecutionException::class)
     fun getRustcAndCargoCommandLine(isRustc: Boolean): GeneralCommandLine {
-        val commandLine: GeneralCommandLine
         val command = if (isRustc) "rustc" else "cargo"
-        val executable = PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS(command)
+        val executable = executableResolver.findExecutable(command)
         if (executable == null || !executable.exists()) throw ExecutionException(capitalize(command) + " is not found in your PATH environment variable. Please verify your Rust installation and ensure " + command + " is accessible from the command line.")
-        commandLine = GeneralCommandLine(executable.absolutePath)
-        if (!this.arguments!!.isBlank()) commandLine.addParameters(*ParametersList.parse(this.arguments!!))
-        commandLine.setWorkDirectory(project.basePath)
-        return commandLine
+        return buildCommandLine(executable.absolutePath, this.arguments)
     }
 
 
     @Throws(ExecutionException::class)
     private fun getCommandLineWithCustomExecutable(file: File): GeneralCommandLine {
         if (file.isDirectory()) {
-            throw ExecutionException("The specified path is a directory, not an executable file: '" + file.absolutePath + "'. Please select a valid executable file.")
+            throw ExecutionException(DIRECTORY_INSTEAD_OF_EXECUTABLE_PREFIX + file.absolutePath + DIRECTORY_INSTEAD_OF_EXECUTABLE_SUFFIX)
         }
 
         if (!file.canExecute()) {
-            throw ExecutionException("The file '" + file.absolutePath + "' is not executable. Please check file permissions.")
+            throw ExecutionException(FILE_NOT_EXECUTABLE_PREFIX + file.absolutePath + FILE_NOT_EXECUTABLE_SUFFIX)
         }
 
-        val commandLine = GeneralCommandLine(file.absolutePath)
+        return buildCommandLine(file.absolutePath, this.arguments)
+    }
 
-        val args = this.arguments
-        if (args != null && args.trim { it <= ' ' }.isNotBlank()) {
+    private fun buildCommandLine(exePath: String, args: String?): GeneralCommandLine {
+        val commandLine = GeneralCommandLine(exePath)
+        if (!args.isNullOrBlank()) {
             commandLine.addParameters(*ParametersList.parse(args))
         }
-
-        commandLine.setWorkDirectory(project.basePath)
+        commandLine.setWorkDirectory(project.basePath ?: System.getProperty("user.dir"))
 
         return commandLine
     }

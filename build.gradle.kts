@@ -24,6 +24,19 @@ dependencies {
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
     }
+
+    // Dependency for unit testing with JUnit
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0") {
+        exclude(group = "junit", module = "junit")
+    }
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.0") {
+        exclude(group = "junit", module = "junit")
+    }
+
+    // Add JUnit 4 as a runtime dependency to avoid NoClassDefFoundError
+    testRuntimeOnly("junit:junit:4.13.2")
+
+    testImplementation("org.mockito:mockito-core:5.21.0")
 }
 
 intellijPlatform {
@@ -49,5 +62,12 @@ tasks {
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
     }
 }

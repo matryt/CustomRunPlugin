@@ -9,6 +9,7 @@ import com.intellij.execution.configurations.ParametersList
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.execution.configurations.RunConfiguration
 import com.intellij.execution.configurations.RunConfigurationBase
+import com.intellij.execution.configurations.RunConfigurationOptions
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessHandler
@@ -61,7 +62,7 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
     }
 
     @get:Throws(ExecutionException::class)
-    private val commandLineForOtherCase: GeneralCommandLine
+    val commandLineForOtherCase: GeneralCommandLine
         get() {
             val commandLine: GeneralCommandLine
             val customCmd = this.customCommand
@@ -88,7 +89,7 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
     }
 
     @Throws(ExecutionException::class)
-    private fun getRustcAndCargoCommandLine(isRustc: Boolean): GeneralCommandLine {
+    fun getRustcAndCargoCommandLine(isRustc: Boolean): GeneralCommandLine {
         val commandLine: GeneralCommandLine
         val command = if (isRustc) "rustc" else "cargo"
         val executable = PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS(command)
@@ -120,5 +121,9 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
         commandLine.setWorkDirectory(project.basePath)
 
         return commandLine
+    }
+
+    override fun getOptionsClass(): Class<out RunConfigurationOptions> {
+        return CustomRunConfigurationOptions::class.java
     }
 }

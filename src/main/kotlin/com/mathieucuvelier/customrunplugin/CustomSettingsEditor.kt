@@ -23,14 +23,14 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
 
     private var tempExecutionType: ExecutionType = ExecutionType.RUSTC
 
-    override fun resetEditorFrom(configuration: CustomRunConfigurationBase) {
+    public override fun resetEditorFrom(configuration: CustomRunConfigurationBase) {
         tempExecutionType = configuration.executionType
         executionTypeComboBox.selectedItem = configuration.executionType
         customCommandField.text = configuration.customCommand.toString()
         argumentsField.text = configuration.arguments
     }
 
-    override fun applyEditorTo(configuration: CustomRunConfigurationBase) {
+    public override fun applyEditorTo(configuration: CustomRunConfigurationBase) {
         val selectedType = executionTypeComboBox.selectedItem as? ExecutionType ?: ExecutionType.RUSTC
 
         if (selectedType == ExecutionType.OTHER && customCommandField.text.trim().isEmpty()) {
@@ -42,7 +42,7 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
         configuration.arguments = argumentsField.text
     }
 
-    override fun createEditor(): JComponent {
+    public override fun createEditor(): JComponent {
         configureCustomCommandField()
         argumentsField = RawCommandLineEditor()
 

@@ -4,6 +4,7 @@ import com.intellij.execution.ExecutionException
 import com.intellij.openapi.project.Project
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito
 import java.io.File
@@ -82,5 +83,52 @@ class CustomRunConfigurationBaseTest {
         val commandLine = config.getRustcAndCargoCommandLine(false)
         val expectedExecutable = exeName
         assertEquals(expectedExecutable, File(commandLine.exePath).name)
+    }
+
+    @Test
+    fun `test buildCommandLine parses arguments correctly`() {
+        val isWindows = System.getProperty("os.name").startsWith("Windows")
+        val exeName = if (isWindows) "myprog.exe" else "myprog"
+        val tempDir: Path = Files.createTempDirectory("fakeProg")
+        val exePath = tempDir.resolve(exeName)
+        Files.createFile(exePath)
+        exePath.toFile().setExecutable(true)
+
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig")
+        config.customCommand = exePath.toAbsolutePath().toString()
+        config.executionType = ExecutionType.OTHER
+        config.arguments = "arg1 \"arg two\" arg3"
+
+        val commandLine = config.commandLineForOtherCase
+
+        assertEquals(File(commandLine.exePath).name, exeName)
+        val cmdString = commandLine.commandLineString
+        assertTrue(cmdString.contains("arg1"))
+        assertTrue(cmdString.contains("arg two"))
+    }
+
+    @Test
+    fun `test getCommandLineWithCustomExecutable directory throws`() {
+        val tempDir: Path = Files.createTempDirectory("notExecutableDir")
+        val dirFile = tempDir.toFile()
+
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig")
+        val exception = assertThrows(ExecutionException::class.java) {
+            config.customCommand = dirFile.absolutePath
+            config.commandLineForOtherCase
+        }
+        assertEquals(CustomRunConfigurationBase.DIRECTORY_INSTEAD_OF_EXECUTABLE_PREFIX + dirFile.absolutePath + CustomRunConfigurationBase.DIRECTORY_INSTEAD_OF_EXECUTABLE_SUFFIX, exception.message)
+    }
+
+    @Test
+    fun `test resolver returns null leads to not found exception`() {
+        val resolver = ExecutableResolver { _ -> null }
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig", resolver)
+        val missing = "nonexistentcmd"
+        config.customCommand = missing
+        val exception = assertThrows(ExecutionException::class.java) {
+            config.commandLineForOtherCase
+        }
+        assertEquals(CustomRunConfigurationBase.EXECUTABLE_NOT_FOUND_PREFIX + missing + CustomRunConfigurationBase.EXECUTABLE_NOT_FOUND_SUFFIX, exception.message)
     }
 }

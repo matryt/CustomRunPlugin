@@ -14,6 +14,7 @@ import com.intellij.ui.dsl.builder.RowLayout
 import com.intellij.ui.dsl.builder.TopGap
 import javax.swing.JComponent
 import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 
 class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
     private lateinit var executionTypeComboBox: ComboBox<ExecutionType>
@@ -21,15 +22,11 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
     private lateinit var argumentsField: RawCommandLineEditor
     private var customCommandRow: Row? = null
 
-    private var tempExecutionType: ExecutionType = ExecutionType.RUSTC
-
     public override fun resetEditorFrom(configuration: CustomRunConfigurationBase) {
         if (!this::executionTypeComboBox.isInitialized || !this::customCommandField.isInitialized || !this::argumentsField.isInitialized) {
-            // If editor was not created, create it lazily so tests calling resetEditorFrom without createEditor still work
             createEditor()
         }
 
-        tempExecutionType = configuration.executionType
         executionTypeComboBox.selectedItem = configuration.executionType
         customCommandField.text = configuration.customCommand.toString()
         argumentsField.text = configuration.arguments
@@ -92,24 +89,25 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
     }
 
     private fun configureVisibilityLogic() {
-        executionTypeComboBox.addActionListener {
+        if (!this::executionTypeComboBox.isInitialized) return
+
+        val updateVisibility = {
             val selected = executionTypeComboBox.selectedItem as? ExecutionType
-            if (selected != null) {
-                tempExecutionType = selected
-                customCommandRow?.visible(selected == ExecutionType.OTHER)
-                fireEditorStateChanged()
-            }
+            customCommandRow?.visible(selected == ExecutionType.OTHER)
+            fireEditorStateChanged()
         }
 
-        customCommandRow?.visible(tempExecutionType == ExecutionType.OTHER)
+        executionTypeComboBox.addActionListener { updateVisibility() }
 
-        val documentListener = object : javax.swing.event.DocumentListener {
+        updateVisibility()
+
+        val documentListener = object : DocumentListener {
             override fun insertUpdate(e: DocumentEvent?) = fireEditorStateChanged()
             override fun removeUpdate(e: DocumentEvent?) = fireEditorStateChanged()
             override fun changedUpdate(e: DocumentEvent?) = fireEditorStateChanged()
         }
 
-        customCommandField.textField.document.addDocumentListener(documentListener)
-        argumentsField.textField.document.addDocumentListener(documentListener)
+        if (this::customCommandField.isInitialized) customCommandField.textField.document.addDocumentListener(documentListener)
+        if (this::argumentsField.isInitialized) argumentsField.textField.document.addDocumentListener(documentListener)
     }
 }

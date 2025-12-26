@@ -10,6 +10,7 @@ import org.mockito.Mockito
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import com.mathieucuvelier.customrunplugin.testutils.FakeExecutableResolver
 
 class CustomRunConfigurationBaseTest {
 
@@ -92,9 +93,12 @@ class CustomRunConfigurationBaseTest {
         val tempDir: Path = Files.createTempDirectory("fakeProg")
         val exePath = tempDir.resolve(exeName)
         Files.createFile(exePath)
+        exePath.toFile().deleteOnExit()
+        tempDir.toFile().deleteOnExit()
         exePath.toFile().setExecutable(true)
 
-        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig")
+        val resolver = FakeExecutableResolver.fromFile(exePath.toFile())
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig", resolver)
         config.customCommand = exePath.toAbsolutePath().toString()
         config.executionType = ExecutionType.OTHER
         config.arguments = "arg1 \"arg two\" arg3"
@@ -105,6 +109,51 @@ class CustomRunConfigurationBaseTest {
         val cmdString = commandLine.commandLineString
         assertTrue(cmdString.contains("arg1"))
         assertTrue(cmdString.contains("arg two"))
+    }
+
+    @Test
+    fun `test buildCommandLine parses nested quotes and escapes`() {
+        val isWindows = System.getProperty("os.name").startsWith("Windows")
+        val exeName = if (isWindows) "myprog.exe" else "myprog"
+        val tempDir: Path = Files.createTempDirectory("fakeProg2")
+        val exePath = tempDir.resolve(exeName)
+        Files.createFile(exePath)
+        exePath.toFile().deleteOnExit()
+        tempDir.toFile().deleteOnExit()
+        exePath.toFile().setExecutable(true)
+
+        val resolver = FakeExecutableResolver.fromFile(exePath.toFile())
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig", resolver)
+        config.customCommand = exePath.toAbsolutePath().toString()
+        config.executionType = ExecutionType.OTHER
+        config.arguments = "arg1 \"arg \\\"nested\\\" two\" arg3"
+
+        val commandLine = config.commandLineForOtherCase
+        val cmdString = commandLine.commandLineString
+        assertTrue(cmdString.contains("arg1"))
+        assertTrue(cmdString.contains("nested"))
+    }
+
+    @Test
+    fun `test buildCommandLine accepts empty args`() {
+        val isWindows = System.getProperty("os.name").startsWith("Windows")
+        val exeName = if (isWindows) "myprog.exe" else "myprog"
+        val tempDir: Path = Files.createTempDirectory("fakeProg3")
+        val exePath = tempDir.resolve(exeName)
+        Files.createFile(exePath)
+        exePath.toFile().deleteOnExit()
+        tempDir.toFile().deleteOnExit()
+        exePath.toFile().setExecutable(true)
+
+        val resolver = FakeExecutableResolver.fromFile(exePath.toFile())
+        val config = CustomRunConfigurationBase(mockProject, mockFactory, "TestConfig", resolver)
+        config.customCommand = exePath.toAbsolutePath().toString()
+        config.executionType = ExecutionType.OTHER
+        config.arguments = ""
+
+        val commandLine = config.commandLineForOtherCase
+        val cmdString = commandLine.commandLineString
+        assertTrue(cmdString.contains(exeName))
     }
 
     @Test

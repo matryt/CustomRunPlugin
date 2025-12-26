@@ -13,6 +13,7 @@ import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import java.io.File
@@ -23,6 +24,7 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
     RunConfigurationBase<CustomRunConfigurationOptions?>(project, factory, name) {
 
     companion object {
+        private val LOG: Logger = Logger.getInstance(CustomRunConfigurationBase::class.java)
         const val NO_EXECUTABLE_SPECIFIED_MSG: String = "No executable specified. Please select an executable in the run configuration settings."
         const val EXECUTABLE_NOT_FOUND_PREFIX: String = "Executable not found: '"
         const val EXECUTABLE_NOT_FOUND_SUFFIX: String = "'. Please verify the path or check that it exists in your PATH environment variable."
@@ -77,19 +79,23 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
         get() {
             val customCmd = this.customCommand
             if (customCmd == null || customCmd.trim { it <= ' ' }.isEmpty()) {
+                LOG.warn("No executable specified for Other execution type")
                 throw ExecutionException(NO_EXECUTABLE_SPECIFIED_MSG)
             }
 
             val file = File(customCmd)
-            return if (file.exists()) {
-                getCommandLineWithCustomExecutable(file)
+            val resolvedFile: File = if (file.exists()) {
+                file
             } else {
                 val fileWithPath = executableResolver.findExecutable(customCmd)
                 if (fileWithPath == null || !fileWithPath.exists()) {
+                    LOG.warn("Executable not found: $customCmd")
                     throw ExecutionException(EXECUTABLE_NOT_FOUND_PREFIX + customCmd + EXECUTABLE_NOT_FOUND_SUFFIX)
                 }
-                getCommandLineWithCustomExecutable(fileWithPath)
+                fileWithPath
             }
+
+            return getCommandLineWithCustomExecutable(resolvedFile)
         }
 
     private fun capitalize(original: String): String {
@@ -101,7 +107,10 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
     fun getRustcAndCargoCommandLine(isRustc: Boolean): GeneralCommandLine {
         val command = if (isRustc) "rustc" else "cargo"
         val executable = executableResolver.findExecutable(command)
-        if (executable == null || !executable.exists()) throw ExecutionException(capitalize(command) + " is not found in your PATH environment variable. Please verify your Rust installation and ensure " + command + " is accessible from the command line.")
+        if (executable == null || !executable.exists()) {
+            LOG.warn("$command not found in PATH")
+            throw ExecutionException(capitalize(command) + " is not found in your PATH environment variable. Please verify your Rust installation and ensure " + command + " is accessible from the command line.")
+        }
         return buildCommandLine(executable.absolutePath, this.arguments)
     }
 
@@ -113,7 +122,10 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
         }
 
         if (!file.canExecute()) {
-            throw ExecutionException(FILE_NOT_EXECUTABLE_PREFIX + file.absolutePath + FILE_NOT_EXECUTABLE_SUFFIX)
+            val isWindows = System.getProperty("os.name").startsWith("Windows")
+            if (!isWindows || !file.name.endsWith(".exe", ignoreCase = true)) {
+                throw ExecutionException(FILE_NOT_EXECUTABLE_PREFIX + file.absolutePath + FILE_NOT_EXECUTABLE_SUFFIX)
+            }
         }
 
         return buildCommandLine(file.absolutePath, this.arguments)
@@ -124,7 +136,8 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
         if (!args.isNullOrBlank()) {
             commandLine.addParameters(*ParametersList.parse(args))
         }
-        commandLine.setWorkDirectory(project.basePath ?: System.getProperty("user.dir"))
+        val workDir = project.basePath ?: System.getProperty("user.dir")
+        commandLine.setWorkDirectory(workDir)
 
         return commandLine
     }

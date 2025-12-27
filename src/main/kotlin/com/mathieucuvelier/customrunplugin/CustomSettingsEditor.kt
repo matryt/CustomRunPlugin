@@ -1,5 +1,6 @@
 package com.mathieucuvelier.customrunplugin
 
+import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.options.SettingsEditor
@@ -17,26 +18,23 @@ import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
 class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
+    private var panelComponent: JComponent? = null
     private lateinit var executionTypeComboBox: ComboBox<ExecutionType>
     private lateinit var customCommandField: TextFieldWithBrowseButton
     private lateinit var argumentsField: RawCommandLineEditor
     private var customCommandRow: Row? = null
+    private var listenersInitialized: Boolean = false
 
     public override fun resetEditorFrom(configuration: CustomRunConfigurationBase) {
-        if (!this::executionTypeComboBox.isInitialized || !this::customCommandField.isInitialized || !this::argumentsField.isInitialized) {
-            createEditor()
-        }
+        if (panelComponent == null) createEditor()
 
         executionTypeComboBox.selectedItem = configuration.executionType
-        customCommandField.text = configuration.customCommand.toString()
-        argumentsField.text = configuration.arguments
+        customCommandField.text = configuration.customCommand ?: ""
+        argumentsField.text = configuration.arguments ?: ""
     }
 
     public override fun applyEditorTo(configuration: CustomRunConfigurationBase) {
-        if (!this::executionTypeComboBox.isInitialized || !this::customCommandField.isInitialized || !this::argumentsField.isInitialized) {
-            // ensure editor components exist
-            createEditor()
-        }
+        if (panelComponent == null) createEditor()
 
         val selectedType = executionTypeComboBox.selectedItem as? ExecutionType ?: ExecutionType.RUSTC
 
@@ -45,15 +43,18 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
         }
 
         configuration.executionType = selectedType
-        configuration.customCommand = customCommandField.text
+        configuration.customCommand = customCommandField.text.takeIf { it.isNotBlank() }
         configuration.arguments = argumentsField.text
     }
 
     public override fun createEditor(): JComponent {
+        // Create once and reuse to avoid duplicated listeners/lateinit issues in tests
+        if (panelComponent != null) return panelComponent!!
+
         configureCustomCommandField()
         argumentsField = RawCommandLineEditor()
 
-        val panel = panel {
+        val builtPanel = panel {
             row("Execution type:") {
                 executionTypeComboBox = comboBox(ExecutionType.entries.toList()).component
                 executionTypeComboBox.renderer = SimpleListCellRenderer.create { label, value, _ ->
@@ -71,7 +72,8 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
         }
 
         configureVisibilityLogic()
-        return panel
+        panelComponent = builtPanel
+        return panelComponent!!
     }
 
     private fun configureCustomCommandField() {
@@ -81,7 +83,7 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
             .withDescription("Choose the executable to run")
 
         customCommandField.addActionListener {
-            com.intellij.openapi.fileChooser.FileChooser.chooseFile(descriptor, null, null) { file ->
+            FileChooser.chooseFile(descriptor, null, null) { file ->
                 customCommandField.text = file.path
                 fireEditorStateChanged()
             }
@@ -90,6 +92,7 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
 
     private fun configureVisibilityLogic() {
         if (!this::executionTypeComboBox.isInitialized) return
+        if (listenersInitialized) return
 
         val updateVisibility = {
             val selected = executionTypeComboBox.selectedItem as? ExecutionType
@@ -109,5 +112,7 @@ class CustomSettingsEditor : SettingsEditor<CustomRunConfigurationBase>() {
 
         if (this::customCommandField.isInitialized) customCommandField.textField.document.addDocumentListener(documentListener)
         if (this::argumentsField.isInitialized) argumentsField.textField.document.addDocumentListener(documentListener)
+
+        listenersInitialized = true
     }
 }

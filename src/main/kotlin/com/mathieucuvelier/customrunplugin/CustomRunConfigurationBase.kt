@@ -121,14 +121,23 @@ class CustomRunConfigurationBase(project: Project, factory: ConfigurationFactory
             throw ExecutionException(DIRECTORY_INSTEAD_OF_EXECUTABLE_PREFIX + file.absolutePath + DIRECTORY_INSTEAD_OF_EXECUTABLE_SUFFIX)
         }
 
-        if (!file.canExecute()) {
-            val isWindows = System.getProperty("os.name").startsWith("Windows")
-            if (!isWindows || !file.name.endsWith(".exe", ignoreCase = true)) {
-                throw ExecutionException(FILE_NOT_EXECUTABLE_PREFIX + file.absolutePath + FILE_NOT_EXECUTABLE_SUFFIX)
-            }
+        if (!isExecutableFile(file)) {
+            throw ExecutionException(FILE_NOT_EXECUTABLE_PREFIX + file.absolutePath + FILE_NOT_EXECUTABLE_SUFFIX)
         }
 
         return buildCommandLine(file.absolutePath, this.arguments)
+    }
+
+    private fun isExecutableFile(file: File): Boolean {
+        val isWindows = System.getProperty("os.name").startsWith("Windows")
+        return if (isWindows) {
+            // On Windows accept common executable extensions when canExecute() may be false
+            val lower = file.name.lowercase()
+            val windowsExt = listOf(".exe", ".bat", ".cmd", ".com")
+            file.canExecute() || windowsExt.any { lower.endsWith(it) }
+        } else {
+            file.canExecute()
+        }
     }
 
     private fun buildCommandLine(exePath: String, args: String?): GeneralCommandLine {

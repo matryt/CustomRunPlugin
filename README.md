@@ -26,29 +26,59 @@ Requirements
 
 Build and run
 -------------
-From the repository root, use the Gradle wrapper for all commands. Examples below assume a Unix-like shell; on Windows use `.\\gradlew.bat` instead of `./gradlew`.
-
-Build and run unit tests:
+From the repository root, use the Gradle wrapper for all commands. Examples below show Unix/macOS and Windows.
 
 ```bash
 # Unix / macOS
 ./gradlew clean test
 
-# Windows (PowerShell)
+# Windows
 .\gradlew.bat clean test
 ```
 
 Run an IDE sandbox with the plugin installed (for manual testing):
 
 ```bash
+# Unix / macOS
 ./gradlew runIde
+
+# Windows
+.\gradlew.bat runIde
 ```
 
 Package the plugin (creates a ZIP under `build/distributions`):
 
 ```bash
+# Unix / macOS
 ./gradlew buildPlugin
+
+# Windows
+.\gradlew.bat buildPlugin
 ```
+
+Quick usage
+-----------
+A short, manual guide to test the plugin from the running IDE sandbox:
+
+1. Open Run | Edit Configurations...
+2. Click + and select "Custom Run Configuration".
+3. Choose the execution type from the dropdown:
+   - `Rustc` to run `rustc` from PATH.
+   - `Cargo` to run `cargo` from PATH.
+   - `Other` to pick a local executable file.
+4. If you selected `Other`, click the Browse button and choose an executable file on your filesystem.
+5. Enter any command-line arguments in the "Arguments" field (they will be parsed and passed to the executable).
+6. Click Apply, then Run.
+
+Design and implementation notes
+-------------------------------
+- Command construction is centralized in a helper so arguments are parsed consistently and the configured working directory is applied.
+- Error messages used by the plugin are centralized as constants to keep tests stable and make future internationalization easier.
+- The settings editor uses standard components (`ComboBox`, `TextFieldWithBrowseButton`, `RawCommandLineEditor`) and aligns labels and fields following basic JetBrains UI Guidelines.
+
+Windows executable heuristic
+----------------------------
+On Windows, file permissions do not always mark files as executable in the same way as on Unix. To be pragmatic and avoid false negatives, the plugin accepts common Windows executable extensions (for example `.exe`, `.bat`, `.cmd`, `.com`) in addition to checking `File.canExecute()`. This makes running local tools on Windows more robust, but it is a conservative heuristic; if you need stricter validation you can enable additional checks or preferences.
 
 Project structure
 -----------------
@@ -64,9 +94,3 @@ The implementation follows the standard IntelliJ plugin pattern:
 Testing approach
 ----------------
 Unit tests are placed in `src/test/kotlin`. They focus on pure logic: building command lines, argument parsing, and error handling. The tests use a small `FakeExecutableResolver` to avoid depending on the host PATH or filesystem permissions.
-
-Design and implementation notes
--------------------------------
-- Command construction is centralized in a helper so arguments are parsed consistently and the configured working directory is applied.
-- Error messages used by the plugin are centralized as constants to keep tests stable and make future internationalization easier.
-- The settings editor uses standard components (`ComboBox`, `TextFieldWithBrowseButton`, `RawCommandLineEditor`) and aligns labels and fields following basic JetBrains UI Guidelines.
